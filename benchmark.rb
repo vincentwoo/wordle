@@ -8,12 +8,12 @@ StackProf.run(mode: :cpu, raw: true, out: 'perf2.dump') do
 
   puzzles = File.read('benchmark.txt').split("\n")
   puzzles = puzzles.first(ARGV[0].to_i) if ARGV[0]
+  puzzles = ['query']
 
   def remaining_solutions solutions, guess, mask
     i = 4
     while i >= 0
-      m = mask & 3
-      solutions = case m
+      solutions = case mask & 3
       when 0
         solutions.reject { |soln| soln.include? guess[i] }
       when 1
