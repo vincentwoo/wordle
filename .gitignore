@@ -2,3 +2,4 @@
 *.dump
 results
 *.bin
+*.o
