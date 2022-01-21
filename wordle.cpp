@@ -1,14 +1,23 @@
 #include <algorithm>
-#include <iostream>
+#include <fcntl.h>
 #include <fstream>
-#include <vector>
-#include <unordered_map>
-#include <stdlib.h>
-#include <stdio.h>
+#include <iostream>
 #include <math.h>
+#include <numeric>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <unordered_map>
+#include <vector>
 using namespace std;
 
 typedef unsigned char byte;
+
+vector<string> possibles;
+vector<string> solutions;
+vector<int> starting_solutions;
+byte* masks;
 
 byte create_mask(const string &guess, const string &soln) {
   int mask[] = { 0, 0, 0, 0, 0 };
@@ -49,13 +58,47 @@ void print_mask(byte mask) {
   cout << ret << endl;
 }
 
-void play_game(
-  const vector<string> &solutions,
-  const vector<string> &possibles,
-  const byte* masks) {
+int guess_next_word(const vector<int> &remaining_solutions) {
+  if (remaining_solutions.size() == 1) return remaining_solutions[0];
+  int min_score = 9999;
+  int min_guess = 0;
+  for (int guess_idx = 0; guess_idx < possibles.size(); guess_idx++) {
+    unordered_map<byte, int> tally;
+    for (auto soln : remaining_solutions) {
+      tally[masks[guess_idx * solutions.size() + soln]]++;
+    }
+    auto max = max_element(
+      tally.begin(),
+      tally.end(),
+      [] (const auto& a, const auto& b) -> bool { return a.second < b.second; }
+    );
+    int bonus =
+      guess_idx < solutions.size() && std::find(
+        remaining_solutions.begin(),
+        remaining_solutions.end(),
+        guess_idx
+      ) != remaining_solutions.end() ?
+        -1 : 0;
+    if (max->second * 2 + bonus < min_score) {
+      min_score = max->second * 2 + bonus;
+      min_guess = guess_idx;
+    }
+  }
+  return min_guess;
+}
 
-  string guess = "tolar";
-  vector<int> *remaining_solutions = new vector<int>();
+vector<int>* filter_solutions(int guess_idx, byte mask, vector<int>& current_solutions) {
+  vector<int> *ret = new vector<int>();
+  for (int soln : current_solutions) {
+    if (mask == masks[guess_idx * solutions.size() + soln])
+      ret->push_back(soln);
+  }
+  return ret;
+}
+
+void play_game() {
+  string guess = "roate";
+  vector<int> *remaining_solutions = &starting_solutions;
   while (true) {
     cout << "I think you should guess " << guess << endl;
     cout << "Enter results ('.' for no match, 'X' for yellow, 'O' for green):" << endl;
@@ -74,20 +117,9 @@ void play_game(
     auto it = find(possibles.begin(), possibles.end(), guess);
     int guess_idx = distance(possibles.begin(), it);
 
-    if (remaining_solutions->empty()) {
-      for (int i = 0; i < solutions.size(); i++) {
-        if (mask == masks[guess_idx * solutions.size() + i])
-          remaining_solutions->push_back(i);
-      }
-    } else {
-      vector<int> *next_remaining_solutions = new vector<int>();
-      for (int soln : *remaining_solutions) {
-        if (mask == masks[guess_idx * solutions.size() + soln])
-          next_remaining_solutions->push_back(soln);
-      }
-      delete remaining_solutions;
-      remaining_solutions = next_remaining_solutions;
-    }
+    vector<int> *tmp = filter_solutions(guess_idx, mask, *remaining_solutions);
+    if (remaining_solutions != &starting_solutions) delete remaining_solutions;
+    remaining_solutions = tmp;
 
     cout << remaining_solutions->size() << " remaining solutions: ";
     vector<string> remaining_solutions_display;
@@ -102,35 +134,40 @@ void play_game(
 
     if (remaining_solutions->size() == 1) break;
 
-    int min_score = 9999;
-    int min_guess = 0;
-    for (int guess_idx = 0; guess_idx < possibles.size(); guess_idx++) {
-      unordered_map<byte, int> tally;
-      for (auto soln : *remaining_solutions) {
-        tally[masks[guess_idx * solutions.size() + soln]]++;
-      }
-      auto max = max_element(
-        tally.begin(),
-        tally.end(),
-        [] (const auto& a, const auto& b) -> bool { return a.second < b.second; }
-      );
-      int bonus =
-        std::find(remaining_solutions->begin(), remaining_solutions->end(), guess_idx) != remaining_solutions->end() ?
-          -1 : 0;
-      if (max->second + bonus < min_score) {
-        min_score = max->second;
-        min_guess = guess_idx;
-      }
-    }
-
-    guess = possibles[min_guess];
+    guess = possibles[guess_next_word(*remaining_solutions)];
   }
+}
+
+double benchmark() {
+  auto it = find(possibles.begin(), possibles.end(), "roate");
+  int starting_guess_idx = distance(possibles.begin(), it);
+  int turns = 0;
+
+  for (int answer = 0; answer < solutions.size(); answer++) {
+    // cout << answer << endl;
+    vector<int> *remaining_solutions = &starting_solutions;
+    int guess_idx = starting_guess_idx;
+    string debug = "";
+
+    while (true) {
+      debug += possibles[guess_idx] + " ";
+      if (guess_idx == answer) break;
+      turns++;
+
+      byte mask = masks[guess_idx * solutions.size() + answer];
+      vector<int> *tmp = filter_solutions(guess_idx, mask, *remaining_solutions);
+      if (remaining_solutions != &starting_solutions) delete remaining_solutions;
+      remaining_solutions = tmp;
+
+      guess_idx = guess_next_word(*remaining_solutions);
+    }
+    cout << debug << endl;
+  }
+  return (double)turns / solutions.size();
 }
 
 int main() {
   ifstream wordlist("word_lists.txt");
-  vector<string> possibles;
-  vector<string> solutions;
   bool hit_break = false;
   for(string line; getline( wordlist, line ); )
   {
@@ -143,23 +180,26 @@ int main() {
   }
   wordlist.close();
 
-  byte* masks = new byte[possibles.size() * solutions.size()];
+  starting_solutions.resize(solutions.size());
+  iota(starting_solutions.begin(), starting_solutions.end(), 0);
 
-  if (FILE *f = fopen("masks_array.bin", "rb")) {
-    fread(masks, sizeof(byte), possibles.size() * solutions.size(), f);
-    fclose(f);
+  int f = open("masks_array.bin", O_RDONLY);
+  if (f != -1) {
+    masks = static_cast<byte*>(mmap(NULL, possibles.size() * solutions.size(), PROT_READ, MAP_PRIVATE, f, 0u));
   } else {
     int i = 0;
+    masks = new byte[possibles.size() * solutions.size()];
     for (auto guess : possibles) {
       for (auto soln : solutions) {
         masks[i++] = create_mask(guess, soln);
       }
     }
 
-    f = fopen("masks_array.bin", "wb");
+    FILE* f = fopen("masks_array.bin", "wb");
     fwrite(masks, sizeof(byte), possibles.size() * solutions.size(), f);
     fclose(f);
   }
 
-  play_game(solutions, possibles, masks);
+  // play_game();
+  cout << benchmark();
 }
