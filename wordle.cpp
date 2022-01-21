@@ -59,7 +59,7 @@ void print_mask(byte mask) {
 }
 
 int guess_next_word(const vector<int> &remaining_solutions) {
-  if (remaining_solutions.size() == 1) return remaining_solutions[0];
+  if (remaining_solutions.size() <= 2) return remaining_solutions[0];
   int min_score = 9999;
   int min_guess = 0;
   for (int guess_idx = 0; guess_idx < possibles.size(); guess_idx++) {
@@ -138,8 +138,8 @@ void play_game() {
   }
 }
 
-double benchmark() {
-  auto it = find(possibles.begin(), possibles.end(), "roate");
+double benchmark(string starting_word = "roate") {
+  auto it = find(possibles.begin(), possibles.end(), starting_word);
   int starting_guess_idx = distance(possibles.begin(), it);
   int turns = 0;
 
@@ -147,12 +147,12 @@ double benchmark() {
     // cout << answer << endl;
     vector<int> *remaining_solutions = &starting_solutions;
     int guess_idx = starting_guess_idx;
-    string debug = "";
+    // string debug = "";
 
     while (true) {
-      debug += possibles[guess_idx] + " ";
-      if (guess_idx == answer) break;
+      // debug += possibles[guess_idx] + " ";
       turns++;
+      if (guess_idx == answer) break;
 
       byte mask = masks[guess_idx * solutions.size() + answer];
       vector<int> *tmp = filter_solutions(guess_idx, mask, *remaining_solutions);
@@ -161,7 +161,7 @@ double benchmark() {
 
       guess_idx = guess_next_word(*remaining_solutions);
     }
-    cout << debug << endl;
+    // cout << debug << endl;
   }
   return (double)turns / solutions.size();
 }
@@ -201,5 +201,5 @@ int main() {
   }
 
   // play_game();
-  cout << benchmark();
+  cout << benchmark() << endl;
 }
