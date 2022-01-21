@@ -5,15 +5,18 @@
 #include <unordered_map>
 #include <stdlib.h>
 #include <stdio.h>
+#include <math.h>
 using namespace std;
 
-short create_mask(const string &guess, const string &soln) {
-  short mask[] = { 0, 0, 0, 0, 0 };
-  unordered_map<char, short> letterCounts;
+typedef unsigned char byte;
+
+byte create_mask(const string &guess, const string &soln) {
+  int mask[] = { 0, 0, 0, 0, 0 };
+  unordered_map<char, int> letterCounts;
 
   for (char c : soln) letterCounts[c]++;
 
-  for (unsigned short i = 0; i < guess.length(); i++) {
+  for (int i = 0; i < guess.length(); i++) {
     char c = guess[i];
 
     if (c == soln[i]) {
@@ -22,7 +25,7 @@ short create_mask(const string &guess, const string &soln) {
     }
   }
 
-  for (unsigned short i = 0; i < guess.length(); i++) {
+  for (int i = 0; i < guess.length(); i++) {
     char c = guess[i];
     if (mask[i] == 0 && letterCounts[c] > 0) {
       mask[i] = 1;
@@ -30,24 +33,26 @@ short create_mask(const string &guess, const string &soln) {
     }
   }
 
-  short ret = 0;
-  for (unsigned short i = 0; i < guess.length(); i++) {
-    ret += (mask[i] << 2 * (4 - i));
+  byte ret = 0;
+  for (int i = 0; i < guess.length(); i++) {
+    ret += mask[i] * pow(3, (4 - i));
   }
   return ret;
 }
 
-void print_mask(short mask) {
-  for (short i = 4; i >= 0; i--) {
-    cout << ((mask & (3 << (2 * i))) >> (2 * i));
+void print_mask(byte mask) {
+  char ret[5];
+  for (int i = 4; i >= 0; i--) {
+    ret[i] = '0' + (mask % 3);
+    mask /= 3;
   }
-  cout << endl;
+  cout << ret << endl;
 }
 
 void play_game(
   const vector<string> &solutions,
   const vector<string> &possibles,
-  const short* masks) {
+  const byte* masks) {
 
   string guess = "tolar";
   vector<int> *remaining_solutions = new vector<int>();
@@ -56,14 +61,14 @@ void play_game(
     cout << "Enter results ('.' for no match, 'X' for yellow, 'O' for green):" << endl;
     string mask_buf;
     cin >> mask_buf;
-    short mask = 0;
+    byte mask = 0;
     for (int i = 0; i < 5; i++) {
-      short m = 0;
+      int m = 0;
       if (mask_buf[i] == 'x')
         m = 1;
       else if (mask_buf[i] == 'o')
         m = 2;
-      mask += (m << 2 * (4 - i));
+      mask += m * pow(3, (4 - i));
     }
 
     auto it = find(possibles.begin(), possibles.end(), guess);
@@ -100,7 +105,7 @@ void play_game(
     int min_score = 9999;
     int min_guess = 0;
     for (int guess_idx = 0; guess_idx < possibles.size(); guess_idx++) {
-      unordered_map<short, int> tally;
+      unordered_map<byte, int> tally;
       for (auto soln : *remaining_solutions) {
         tally[masks[guess_idx * solutions.size() + soln]]++;
       }
@@ -138,10 +143,10 @@ int main() {
   }
   wordlist.close();
 
-  short* masks = new short[possibles.size() * solutions.size()];
+  byte* masks = new byte[possibles.size() * solutions.size()];
 
   if (FILE *f = fopen("masks_array.bin", "rb")) {
-    fread(masks, sizeof(short), possibles.size() * solutions.size(), f);
+    fread(masks, sizeof(byte), possibles.size() * solutions.size(), f);
     fclose(f);
   } else {
     int i = 0;
@@ -152,7 +157,7 @@ int main() {
     }
 
     f = fopen("masks_array.bin", "wb");
-    fwrite(masks, sizeof(short), possibles.size() * solutions.size(), f);
+    fwrite(masks, sizeof(byte), possibles.size() * solutions.size(), f);
     fclose(f);
   }
 
