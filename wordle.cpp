@@ -63,15 +63,12 @@ int guess_next_word(const vector<int> &remaining_solutions) {
   int min_score = 9999;
   int min_guess = 0;
   for (int guess_idx = 0; guess_idx < possibles.size(); guess_idx++) {
-    unordered_map<byte, int> tally;
+    byte tally[243] = {0};
     for (auto soln : remaining_solutions) {
       tally[masks[guess_idx * solutions.size() + soln]]++;
     }
-    auto max = max_element(
-      tally.begin(),
-      tally.end(),
-      [] (const auto& a, const auto& b) -> bool { return a.second < b.second; }
-    );
+    int max = *max_element(tally, tally+243);
+
     int bonus =
       guess_idx < solutions.size() && std::find(
         remaining_solutions.begin(),
@@ -79,8 +76,8 @@ int guess_next_word(const vector<int> &remaining_solutions) {
         guess_idx
       ) != remaining_solutions.end() ?
         -1 : 0;
-    if (max->second * 2 + bonus < min_score) {
-      min_score = max->second * 2 + bonus;
+    if (max * 2 + bonus < min_score) {
+      min_score = max * 2 + bonus;
       min_guess = guess_idx;
     }
   }
@@ -185,7 +182,10 @@ int main() {
 
   int f = open("masks_array.bin", O_RDONLY);
   if (f != -1) {
-    masks = static_cast<byte*>(mmap(NULL, possibles.size() * solutions.size(), PROT_READ, MAP_PRIVATE, f, 0u));
+    masks = static_cast<byte*>(mmap(
+      NULL,
+      sizeof(byte) * possibles.size() * solutions.size(),
+      PROT_READ, MAP_PRIVATE, f, 0u));
   } else {
     int i = 0;
     masks = new byte[possibles.size() * solutions.size()];
