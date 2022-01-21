@@ -25,7 +25,7 @@ byte create_mask(const string &guess, const string &soln) {
 
   for (char c : soln) letterCounts[c]++;
 
-  for (int i = 0; i < guess.length(); i++) {
+  for (int i = 0; i < 5; i++) {
     char c = guess[i];
 
     if (c == soln[i]) {
@@ -34,7 +34,7 @@ byte create_mask(const string &guess, const string &soln) {
     }
   }
 
-  for (int i = 0; i < guess.length(); i++) {
+  for (int i = 0; i < 5; i++) {
     char c = guess[i];
     if (mask[i] == 0 && letterCounts[c] > 0) {
       mask[i] = 1;
@@ -43,7 +43,7 @@ byte create_mask(const string &guess, const string &soln) {
   }
 
   byte ret = 0;
-  for (int i = 0; i < guess.length(); i++) {
+  for (int i = 0; i < 5; i++) {
     ret += mask[i] * pow(3, (4 - i));
   }
   return ret;
@@ -141,7 +141,6 @@ double benchmark(string starting_word = "roate") {
   int turns = 0;
 
   for (int answer = 0; answer < solutions.size(); answer++) {
-    // cout << answer << endl;
     vector<int> *remaining_solutions = &starting_solutions;
     int guess_idx = starting_guess_idx;
     // string debug = "";
