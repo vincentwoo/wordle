@@ -64,38 +64,34 @@ int guess_next_word(const vector<int> &remaining_solutions) {
   int min_guess = 0;
   for (int guess_idx = 0; guess_idx < possibles.size(); guess_idx++) {
     byte tally[243] = {0};
+    int bonus = 0;
     for (auto soln : remaining_solutions) {
       tally[masks[guess_idx * solutions.size() + soln]]++;
+      if (soln == guess_idx) bonus = -1;
     }
-    int max = *max_element(tally, tally+243);
 
-    int bonus =
-      guess_idx < solutions.size() && std::find(
-        remaining_solutions.begin(),
-        remaining_solutions.end(),
-        guess_idx
-      ) != remaining_solutions.end() ?
-        -1 : 0;
-    if (max * 2 + bonus < min_score) {
-      min_score = max * 2 + bonus;
+    int max = *max_element(tally, tally+243) * 2 + bonus;
+
+    if (max < min_score) {
+      min_score = max;
       min_guess = guess_idx;
     }
   }
   return min_guess;
 }
 
-vector<int>* filter_solutions(int guess_idx, byte mask, vector<int>& current_solutions) {
-  vector<int> *ret = new vector<int>();
+vector<int> filter_solutions(int guess_idx, byte mask, vector<int>& current_solutions) {
+  vector<int> ret;
   for (int soln : current_solutions) {
     if (mask == masks[guess_idx * solutions.size() + soln])
-      ret->push_back(soln);
+      ret.push_back(soln);
   }
   return ret;
 }
 
 void play_game() {
   string guess = "roate";
-  vector<int> *remaining_solutions = &starting_solutions;
+  vector<int> remaining_solutions;
   while (true) {
     cout << "I think you should guess " << guess << endl;
     cout << "Enter results ('.' for no match, 'X' for yellow, 'O' for green):" << endl;
@@ -114,13 +110,12 @@ void play_game() {
     auto it = find(possibles.begin(), possibles.end(), guess);
     int guess_idx = distance(possibles.begin(), it);
 
-    vector<int> *tmp = filter_solutions(guess_idx, mask, *remaining_solutions);
-    if (remaining_solutions != &starting_solutions) delete remaining_solutions;
-    remaining_solutions = tmp;
+    remaining_solutions = filter_solutions(guess_idx, mask,
+        remaining_solutions.empty() ? starting_solutions : remaining_solutions);
 
-    cout << remaining_solutions->size() << " remaining solutions: ";
+    cout << remaining_solutions.size() << " remaining solutions: ";
     vector<string> remaining_solutions_display;
-    for (auto guess_idx: *remaining_solutions) {
+    for (auto guess_idx: remaining_solutions) {
       remaining_solutions_display.push_back(possibles[guess_idx]);
     }
     sort(remaining_solutions_display.begin(), remaining_solutions_display.end());
@@ -129,9 +124,9 @@ void play_game() {
     }
     cout << endl;
 
-    if (remaining_solutions->size() == 1) break;
+    if (remaining_solutions.size() == 1) break;
 
-    guess = possibles[guess_next_word(*remaining_solutions)];
+    guess = possibles[guess_next_word(remaining_solutions)];
   }
 }
 
@@ -141,7 +136,8 @@ double benchmark(string starting_word = "roate") {
   int turns = 0;
 
   for (int answer = 0; answer < solutions.size(); answer++) {
-    vector<int> *remaining_solutions = &starting_solutions;
+    // cout << "Starting run for " << solutions[answer] << endl;
+    vector<int> remaining_solutions;
     int guess_idx = starting_guess_idx;
     // string debug = "";
 
@@ -151,11 +147,15 @@ double benchmark(string starting_word = "roate") {
       if (guess_idx == answer) break;
 
       byte mask = masks[guess_idx * solutions.size() + answer];
-      vector<int> *tmp = filter_solutions(guess_idx, mask, *remaining_solutions);
-      if (remaining_solutions != &starting_solutions) delete remaining_solutions;
-      remaining_solutions = tmp;
+      // cout << "Starting size: " << remaining_solutions.size() << endl;
+      remaining_solutions = filter_solutions(guess_idx, mask,
+        remaining_solutions.empty() ? starting_solutions : remaining_solutions);
+      // cout << "Guessed " << possibles[guess_idx] << ", Ending size: " << remaining_solutions.size() << ": ";
+      // for (auto i : remaining_solutions) { cout << possibles[i] << " "; }
+      // cout << endl;
 
-      guess_idx = guess_next_word(*remaining_solutions);
+
+      guess_idx = guess_next_word(remaining_solutions);
     }
     // cout << debug << endl;
   }
