@@ -130,36 +130,35 @@ void play_game() {
   }
 }
 
-double benchmark(string starting_word = "roate") {
+vector<int> benchmark(string starting_word = "roate") {
   auto it = find(possibles.begin(), possibles.end(), starting_word);
   int starting_guess_idx = distance(possibles.begin(), it);
-  int turns = 0;
+  vector<int> distribution(7, 0);
 
   for (int answer = 0; answer < solutions.size(); answer++) {
     // cout << "Starting run for " << solutions[answer] << endl;
     vector<int> remaining_solutions;
     int guess_idx = starting_guess_idx;
-    // string debug = "";
+    int depth = 1;
 
     while (true) {
-      // debug += possibles[guess_idx] + " ";
-      turns++;
       if (guess_idx == answer) break;
 
       byte mask = masks[guess_idx * solutions.size() + answer];
       // cout << "Starting size: " << remaining_solutions.size() << endl;
       remaining_solutions = filter_solutions(guess_idx, mask,
-        remaining_solutions.empty() ? starting_solutions : remaining_solutions);
+        depth == 1 ? starting_solutions : remaining_solutions);
       // cout << "Guessed " << possibles[guess_idx] << ", Ending size: " << remaining_solutions.size() << ": ";
       // for (auto i : remaining_solutions) { cout << possibles[i] << " "; }
       // cout << endl;
 
 
       guess_idx = guess_next_word(remaining_solutions);
+      depth++;
     }
-    // cout << debug << endl;
+    distribution[depth]++;
   }
-  return (double)turns / solutions.size();
+  return distribution;
 }
 
 int main() {
@@ -200,5 +199,11 @@ int main() {
   }
 
   // play_game();
-  cout << benchmark() << endl;
+  auto distribution = benchmark();
+  int total = 0;
+  for (int turn = 1; turn <= 6; turn++) {
+    total += distribution[turn] * turn;
+    cout << "Solved in " << turn << " turn: " << distribution[turn] << endl;
+  }
+  cout << "Total average: " << (double) total / solutions.size() << endl;
 }
