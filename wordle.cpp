@@ -1,3 +1,4 @@
+#include <boost/container_hash/hash.hpp>
 #include <algorithm>
 #include <fcntl.h>
 #include <fstream>
@@ -58,27 +59,35 @@ string mask_to_str(byte mask) {
   return ret;
 }
 
-int vectorHash (const vector<int> &V) {
-  int hash = V.size();
-  for(auto const &i : V) {
-    hash ^= i + 0x9e3779b9 + (hash << 6) + (hash >> 2);
+template <typename Container>
+struct container_hash {
+  size_t operator() (Container const& c) const {
+    return boost::hash_range(c.begin(), c.end());
   }
-  return hash;
-}
+};
 
 struct GuessScore {
   int guess;
   int score;
 };
 
-unordered_map<int, GuessScore> cache_1_ply;
+unordered_map<
+  vector<int>,
+  GuessScore,
+  container_hash<vector<int>>
+> cache_1_ply;
+int cache_accesses = 0, cache_hits = 0;
+
 GuessScore guess_next_word(const vector<int> &remaining_solutions) {
   if (remaining_solutions.size() <= 2)
     return { remaining_solutions[0], (int)remaining_solutions.size() - 1 };
 
-  int hash = vectorHash(remaining_solutions);
-  auto it = cache_1_ply.find(hash);
-  if (it != cache_1_ply.end()) return it->second;
+  cache_accesses++;
+  auto it = cache_1_ply.find(remaining_solutions);
+  if (it != cache_1_ply.end()) {
+    cache_hits++;
+    return it->second;
+  }
 
   GuessScore best = { 0, 9999 };
   for (int guess_idx = 0; guess_idx < possibles.size(); guess_idx++) {
@@ -100,7 +109,7 @@ GuessScore guess_next_word(const vector<int> &remaining_solutions) {
       best.guess = guess_idx;
     }
   }
-  cache_1_ply[hash] = best;
+  cache_1_ply[remaining_solutions] = best;
   return best;
 }
 
@@ -274,8 +283,9 @@ int main() {
     for (int turn = 1; turn <= 6; turn++) {
       total += distribution[turn] * turn;
     }
-    cout << guess << ": " << (double) total / solutions.size() << endl;
-    if (i == 1800) break;
+    cout << (double) total / solutions.size() << ": " << guess << endl;
+    cout << cache_1_ply.size() << " cache entries " << double(cache_hits) / cache_accesses << " hit rate" << endl;
+    // if (i == 1800) break;
   }
   guessfile.close();
 
@@ -288,6 +298,7 @@ int main() {
   //   cout << "Solved in " << turn << " turn: " << distribution[turn] << endl;
   // }
   // cout << "Total average: " << (double) total / solutions.size() << endl;
+
 
   // cout << guess_counts.size() << " unique words guessed:" << endl;
   // for (auto entry : guess_counts) {
