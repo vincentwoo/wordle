@@ -49,31 +49,82 @@ byte create_mask(const string &guess, const string &soln) {
   return ret;
 }
 
-void print_mask(byte mask) {
-  char ret[5];
+string mask_to_str(byte mask) {
+  string ret(5, '0');
   for (int i = 4; i >= 0; i--) {
     ret[i] = '0' + (mask % 3);
     mask /= 3;
   }
-  cout << ret << endl;
+  return ret;
 }
 
-int guess_next_word(const vector<int> &remaining_solutions) {
-  if (remaining_solutions.size() <= 2) return remaining_solutions[0];
-  int min_score = 9999;
-  int min_guess = 0;
+int vectorHash (const vector<int> &V) {
+  int hash = V.size();
+  for(auto const &i : V) {
+    hash ^= i + 0x9e3779b9 + (hash << 6) + (hash >> 2);
+  }
+  return hash;
+}
+
+struct GuessScore {
+  int guess;
+  int score;
+};
+
+unordered_map<int, GuessScore> cache_1_ply;
+GuessScore guess_next_word(const vector<int> &remaining_solutions) {
+  if (remaining_solutions.size() <= 2)
+    return { remaining_solutions[0], (int)remaining_solutions.size() - 1 };
+
+  int hash = vectorHash(remaining_solutions);
+  auto it = cache_1_ply.find(hash);
+  if (it != cache_1_ply.end()) return it->second;
+
+  GuessScore best = { 0, 9999 };
   for (int guess_idx = 0; guess_idx < possibles.size(); guess_idx++) {
-    byte tally[243] = {0};
+    short tally[243] = {};
     int bonus = 0;
-    for (auto soln : remaining_solutions) {
+    for (auto const &soln : remaining_solutions) {
       tally[masks[guess_idx * solutions.size() + soln]]++;
       if (soln == guess_idx) bonus = -1;
     }
 
-    int max = *max_element(tally, tally+243) * 2 + bonus;
+    int max = 0;
+    for (auto const &count : tally) {
+      if (count > max) max = count;
+    }
+    max = max * 2 + bonus;
 
-    if (max < min_score) {
-      min_score = max;
+    if (max < best.score) {
+      best.score = max;
+      best.guess = guess_idx;
+    }
+  }
+  cache_1_ply[hash] = best;
+  return best;
+}
+
+int guess_next_word_2_ply(const vector<int> &remaining_solutions) {
+  if (remaining_solutions.size() <= 2) return remaining_solutions[0];
+  if (remaining_solutions.size() < 20) return guess_next_word(remaining_solutions).guess;
+  int min_score = 9999;
+  int min_guess = 0;
+  for (int guess_idx = 0; guess_idx < possibles.size(); guess_idx++) {
+    vector<int> groups[243];
+    for (auto const &soln : remaining_solutions) {
+      if (soln != guess_idx)
+        groups[masks[guess_idx * solutions.size() + soln]].push_back(soln);
+    }
+
+    int score = 0;
+    for (auto const &group : groups) {
+      if (group.empty()) continue;
+      GuessScore leafScore = guess_next_word(group);
+      score += group.size() * leafScore.score;
+    }
+
+    if (score < min_score) {
+      min_score = score;
       min_guess = guess_idx;
     }
   }
@@ -90,7 +141,7 @@ vector<int> filter_solutions(int guess_idx, byte mask, vector<int>& current_solu
 }
 
 void play_game() {
-  string guess = "roate";
+  string guess = "trace";
   vector<int> remaining_solutions;
   while (true) {
     cout << "I think you should guess " << guess << endl;
@@ -126,34 +177,50 @@ void play_game() {
 
     if (remaining_solutions.size() == 1) break;
 
-    guess = possibles[guess_next_word(remaining_solutions)];
+    guess = possibles[guess_next_word_2_ply(remaining_solutions)];
   }
 }
 
-vector<int> benchmark(string starting_word = "roate") {
+unordered_map<int, int> guess_counts;
+
+vector<int> benchmark(string starting_word = "trace") {
   auto it = find(possibles.begin(), possibles.end(), starting_word);
   int starting_guess_idx = distance(possibles.begin(), it);
   vector<int> distribution(7, 0);
 
+  short second_guess_cache[243];
+  fill(second_guess_cache, second_guess_cache+243, -1);
+
   for (int answer = 0; answer < solutions.size(); answer++) {
+  // {
+  //   int answer = 1;
     // cout << "Starting run for " << solutions[answer] << endl;
     vector<int> remaining_solutions;
     int guess_idx = starting_guess_idx;
     int depth = 1;
 
     while (true) {
+      guess_counts[guess_idx]++;
       if (guess_idx == answer) break;
 
       byte mask = masks[guess_idx * solutions.size() + answer];
       // cout << "Starting size: " << remaining_solutions.size() << endl;
       remaining_solutions = filter_solutions(guess_idx, mask,
         depth == 1 ? starting_solutions : remaining_solutions);
-      // cout << "Guessed " << possibles[guess_idx] << ", Ending size: " << remaining_solutions.size() << ": ";
-      // for (auto i : remaining_solutions) { cout << possibles[i] << " "; }
+      // cout << "Guessed " << possibles[guess_idx] << " got " << mask_to_str(mask) << ", Ending size: " << remaining_solutions.size() << ": ";
+      // for (auto i : remaining_solutions) { cout << solutions[i] << " "; }
       // cout << endl;
 
+      if (depth == 1) {
+        if (second_guess_cache[mask] != -1) {
+          guess_idx = second_guess_cache[mask];
+        } else {
+          guess_idx = second_guess_cache[mask] = guess_next_word(remaining_solutions).guess;
+        }
+      } else {
+        guess_idx = guess_next_word(remaining_solutions).guess;
+      }
 
-      guess_idx = guess_next_word(remaining_solutions);
       depth++;
     }
     distribution[depth]++;
@@ -198,12 +265,32 @@ int main() {
     fclose(f);
   }
 
-  // play_game();
-  auto distribution = benchmark();
-  int total = 0;
-  for (int turn = 1; turn <= 6; turn++) {
-    total += distribution[turn] * turn;
-    cout << "Solved in " << turn << " turn: " << distribution[turn] << endl;
+  ifstream guessfile("ranked_first_guesses.txt");
+  int i = 0;
+  for(string guess; getline( guessfile, guess ); i++)
+  {
+    auto distribution = benchmark(guess);
+    int total = 0;
+    for (int turn = 1; turn <= 6; turn++) {
+      total += distribution[turn] * turn;
+    }
+    cout << guess << ": " << (double) total / solutions.size() << endl;
+    if (i == 1800) break;
   }
-  cout << "Total average: " << (double) total / solutions.size() << endl;
+  guessfile.close();
+
+
+  // play_game();
+  // auto distribution = benchmark();
+  // int total = 0;
+  // for (int turn = 1; turn <= 6; turn++) {
+  //   total += distribution[turn] * turn;
+  //   cout << "Solved in " << turn << " turn: " << distribution[turn] << endl;
+  // }
+  // cout << "Total average: " << (double) total / solutions.size() << endl;
+
+  // cout << guess_counts.size() << " unique words guessed:" << endl;
+  // for (auto entry : guess_counts) {
+  //   cout << possibles[entry.first] << ": " << entry.second << endl;
+  // }
 }

@@ -25,7 +25,7 @@ def check_guess guess, soln
   ret
 end
 
-guess = 'roate'
+guess = 'trace'
 while true
   puts "I think you should guess #{guess.upcase}"
   puts "Enter results ('.' for no match, 'X' for yellow, 'O' for green):"
