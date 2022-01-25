@@ -1,17 +1,25 @@
-#include <boost/container_hash/hash.hpp>
 #include <algorithm>
+#include <atomic>
+#include <boost/container_hash/hash.hpp>
+#include <chrono>
+#include <ctime>
 #include <fcntl.h>
 #include <fstream>
 #include <iostream>
 #include <math.h>
+#include <mutex>
 #include <numeric>
+#include <queue>
+#include <shared_mutex>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/stat.h>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
 #ifdef _WIN32
+  #define WIN32_LEAN_AND_MEAN
   #include <Windows.h>
 #else
   #include <sys/mman.h>
@@ -83,6 +91,7 @@ unordered_map<
   GuessScore,
   container_hash<solutions_container>
 > cache_1_ply;
+shared_mutex cache_mutex;
 // int cache_accesses = 0, cache_hits = 0;
 
 GuessScore guess_next_word(const solutions_container &remaining_solutions) {
@@ -90,11 +99,15 @@ GuessScore guess_next_word(const solutions_container &remaining_solutions) {
     return { remaining_solutions[0], (int)remaining_solutions.size() - 1 };
 
   // cache_accesses++;
+  cache_mutex.lock_shared();
   auto it = cache_1_ply.find(remaining_solutions);
   if (it != cache_1_ply.end()) {
     // cache_hits++;
-    return it->second;
+    auto ret = it->second;
+    cache_mutex.unlock_shared();
+    return ret;
   }
+  cache_mutex.unlock_shared();
 
   GuessScore best = { 0, 9999 };
   for (int guess_idx = 0; guess_idx < possibles.size(); guess_idx++) {
@@ -122,7 +135,9 @@ GuessScore guess_next_word(const solutions_container &remaining_solutions) {
       best.guess = guess_idx;
     }
   }
+  cache_mutex.lock();
   cache_1_ply[remaining_solutions] = best;
+  cache_mutex.unlock();
   return best;
 }
 
@@ -217,8 +232,8 @@ vector<int> benchmark(string starting_word = "trace") {
   short second_guess_cache[243];
   fill(second_guess_cache, second_guess_cache+243, -1);
 
-  for (int answer = 0; answer < 10; answer++) {
-    cout << "Starting run for " << solutions[answer] << endl;
+  for (int answer = 0; answer < solutions.size(); answer++) {
+    //cout << "Starting " << starting_word << ", " << solutions[answer] << endl;
     solutions_container remaining_solutions;
     int guess_idx = starting_guess_idx;
     int depth = 1;
@@ -231,7 +246,7 @@ vector<int> benchmark(string starting_word = "trace") {
       // cout << "Starting size: " << remaining_solutions.size() << endl;
       remaining_solutions = filter_solutions(guess_idx, mask,
         depth == 1 ? starting_solutions : remaining_solutions);
-      cout << "Guessed " << possibles[guess_idx] << " got " << mask_to_str(mask) << ", Ending size: " << remaining_solutions.size() << ": " << endl;
+      //cout << "Guessed " << possibles[guess_idx] << " got " << mask_to_str(mask) << ", Ending size: " << remaining_solutions.size() << ": " << endl;
       // for (auto i : remaining_solutions) { cout << solutions[i] << " "; }
       // cout << endl;
 
@@ -250,8 +265,42 @@ vector<int> benchmark(string starting_word = "trace") {
   return distribution;
 }
 
+mutex queueLock;
+queue<int> workQueue;
+
+void jobFunc() {
+  while (true) {
+    int work;
+    queueLock.lock();
+    if (workQueue.empty()) {
+      work = -1;
+    } else {
+      work = workQueue.front();
+      workQueue.pop();
+    }
+    queueLock.unlock();
+
+    if (work == -1) break;
+    auto distribution = benchmark(possibles[work]);
+    int total = 0;
+    for (int turn = 1; turn <= 6; turn++) {
+      total += distribution[turn] * turn;
+    }
+    cout << (double)total / solutions.size() << ": " << possibles[work] << endl;
+  }
+}
+
+void runParallelizedBenchmark() {
+  for (int i = 0; i < possibles.size(); i++) workQueue.push(i);
+  vector<thread*> threads;
+  for (int i = 0; i < 12; i++) {
+    threads.push_back(new thread(jobFunc));
+  }
+  for (auto _thread : threads) _thread->join();
+}
+
 int main() {
-  ifstream wordlist("word_lists.txt");
+  ifstream wordlist("ranked_wordlist.txt");
   bool hit_break = false;
   for(string line; getline( wordlist, line ); )
   {
@@ -296,31 +345,22 @@ int main() {
     fwrite(masks, sizeof(byte), possibles.size() * solutions.size(), f_out);
     fclose(f_out);
   }
+  auto start = chrono::system_clock::now();
 
-  // ifstream guessfile("ranked_first_guesses.txt");
-  // int i = 0;
-  // for(string guess; getline( guessfile, guess ) && i < 20; i++)
-  // {
-  //   auto distribution = benchmark(guess);
-  //   int total = 0;
-  //   for (int turn = 1; turn <= 6; turn++) {
-  //     total += distribution[turn] * turn;
-  //   }
-  //   cout << (double) total / solutions.size() << ": " << guess << endl;
-  //   // cout << cache_1_ply.size() << " cache entries " << double(cache_hits) / cache_accesses << " hit rate" << endl;
-  // }
-  // guessfile.close();
-
+  runParallelizedBenchmark();
   // play_game();
 
-  auto distribution = benchmark();
-  int total = 0;
-  for (int turn = 1; turn <= 6; turn++) {
-    total += distribution[turn] * turn;
-    cout << "Solved in " << turn << " turn: " << distribution[turn] << endl;
-  }
-  cout << "Total average: " << (double) total / solutions.size() << endl;
+  //auto distribution = benchmark();
+  //int total = 0;
+  //for (int turn = 1; turn <= 6; turn++) {
+  //  total += distribution[turn] * turn;
+  //  cout << "Solved in " << turn << " turn: " << distribution[turn] << endl;
+  //}
+  //cout << "Total average: " << (double) total / solutions.size() << endl;
 
+  auto end = chrono::system_clock::now();
+  std::chrono::duration<double> elapsed_seconds = end - start;
+  cout << elapsed_seconds.count() << " elapsed" << endl;
 
   // cout << guess_counts.size() << " unique words guessed:" << endl;
   // for (auto entry : guess_counts) {
