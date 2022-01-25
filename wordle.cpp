@@ -14,10 +14,11 @@
 using namespace std;
 
 typedef unsigned char byte;
+typedef vector<int> solutions_container;
 
 vector<string> possibles;
 vector<string> solutions;
-vector<int> starting_solutions;
+solutions_container starting_solutions;
 byte* masks;
 
 byte create_mask(const string &guess, const string &soln) {
@@ -72,13 +73,13 @@ struct GuessScore {
 };
 
 unordered_map<
-  vector<int>,
+  solutions_container,
   GuessScore,
-  container_hash<vector<int>>
+  container_hash<solutions_container>
 > cache_1_ply;
 // int cache_accesses = 0, cache_hits = 0;
 
-GuessScore guess_next_word(const vector<int> &remaining_solutions) {
+GuessScore guess_next_word(const solutions_container &remaining_solutions) {
   if (remaining_solutions.size() <= 2)
     return { remaining_solutions[0], (int)remaining_solutions.size() - 1 };
 
@@ -119,19 +120,19 @@ GuessScore guess_next_word(const vector<int> &remaining_solutions) {
   return best;
 }
 
-GuessScore guess_next_word_2_ply(const vector<int> &remaining_solutions) {
+GuessScore guess_next_word_2_ply(const solutions_container &remaining_solutions) {
   if (remaining_solutions.size() < 20) return guess_next_word(remaining_solutions);
 
   GuessScore best = { 0, 9999 };
   for (int guess_idx = 0; guess_idx < possibles.size(); guess_idx++) {
-    vector<int> groups[243];
+    solutions_container groups[243];
     for (auto const &soln : remaining_solutions) {
       if (soln != guess_idx)
         groups[masks[guess_idx * solutions.size() + soln]].push_back(soln);
     }
 
     GuessScore subScore = { guess_idx, 0 };
-    // sort(groups, groups+243, [](const vector<int>& a, const vector<int>& b) -> bool {
+    // sort(groups, groups+243, [](const solutions_container& a, const solutions_container& b) -> bool {
     //   return a.size() > b.size();
     // });
 
@@ -142,6 +143,7 @@ GuessScore guess_next_word_2_ply(const vector<int> &remaining_solutions) {
       GuessScore leafScore = guess_next_word(group);
       // if (leafScore.score > subScore.score) subScore.score = leafScore.score;
       subScore.score += group.size() * leafScore.score;
+      if (subScore.score >= best.score) break;
     }
 
     if (subScore.score < best.score) best = subScore;
@@ -149,8 +151,8 @@ GuessScore guess_next_word_2_ply(const vector<int> &remaining_solutions) {
   return best;
 }
 
-vector<int> filter_solutions(int guess_idx, byte mask, vector<int>& current_solutions) {
-  vector<int> ret;
+solutions_container filter_solutions(int guess_idx, byte mask, solutions_container& current_solutions) {
+  solutions_container ret;
   for (int soln : current_solutions) {
     if (mask == masks[guess_idx * solutions.size() + soln])
       ret.push_back(soln);
@@ -160,7 +162,7 @@ vector<int> filter_solutions(int guess_idx, byte mask, vector<int>& current_solu
 
 void play_game() {
   string guess = "trace";
-  vector<int> remaining_solutions;
+  solutions_container remaining_solutions;
   while (true) {
     cout << "I think you should guess " << guess << endl;
     cout << "Enter results ('.' for no match, 'X' for yellow, 'O' for green):" << endl;
@@ -199,7 +201,7 @@ void play_game() {
   }
 }
 
-unordered_map<int, int> guess_counts;
+// unordered_map<int, int> guess_counts;
 
 vector<int> benchmark(string starting_word = "trace") {
   auto it = find(possibles.begin(), possibles.end(), starting_word);
@@ -209,32 +211,29 @@ vector<int> benchmark(string starting_word = "trace") {
   short second_guess_cache[243];
   fill(second_guess_cache, second_guess_cache+243, -1);
 
-  for (int answer = 0; answer < solutions.size(); answer++) {
-    // cout << "Starting run for " << solutions[answer] << endl;
-    vector<int> remaining_solutions;
+  for (int answer = 0; answer < 10; answer++) {
+    cout << "Starting run for " << solutions[answer] << endl;
+    solutions_container remaining_solutions;
     int guess_idx = starting_guess_idx;
     int depth = 1;
 
     while (true) {
-      guess_counts[guess_idx]++;
+      // guess_counts[guess_idx]++;
       if (guess_idx == answer) break;
 
       byte mask = masks[guess_idx * solutions.size() + answer];
       // cout << "Starting size: " << remaining_solutions.size() << endl;
       remaining_solutions = filter_solutions(guess_idx, mask,
         depth == 1 ? starting_solutions : remaining_solutions);
-      // cout << "Guessed " << possibles[guess_idx] << " got " << mask_to_str(mask) << ", Ending size: " << remaining_solutions.size() << ": ";
+      cout << "Guessed " << possibles[guess_idx] << " got " << mask_to_str(mask) << ", Ending size: " << remaining_solutions.size() << ": " << endl;
       // for (auto i : remaining_solutions) { cout << solutions[i] << " "; }
       // cout << endl;
 
-      if (depth == 1) {
-        if (second_guess_cache[mask] != -1) {
-          guess_idx = second_guess_cache[mask];
-        } else {
-          guess_idx = second_guess_cache[mask] = guess_next_word_2_ply(remaining_solutions).guess;
-        }
+      if (depth == 1 && second_guess_cache[mask] != -1) {
+        guess_idx = second_guess_cache[mask];
       } else {
         guess_idx = guess_next_word_2_ply(remaining_solutions).guess;
+        if (depth == 1) second_guess_cache[mask] = guess_idx;
       }
 
       depth++;
@@ -284,7 +283,7 @@ int main() {
 
   // ifstream guessfile("ranked_first_guesses.txt");
   // int i = 0;
-  // for(string guess; getline( guessfile, guess ); i++)
+  // for(string guess; getline( guessfile, guess ) && i < 20; i++)
   // {
   //   auto distribution = benchmark(guess);
   //   int total = 0;
@@ -292,7 +291,7 @@ int main() {
   //     total += distribution[turn] * turn;
   //   }
   //   cout << (double) total / solutions.size() << ": " << guess << endl;
-  //   cout << cache_1_ply.size() << " cache entries " << double(cache_hits) / cache_accesses << " hit rate" << endl;
+  //   // cout << cache_1_ply.size() << " cache entries " << double(cache_hits) / cache_accesses << " hit rate" << endl;
   // }
   // guessfile.close();
 
