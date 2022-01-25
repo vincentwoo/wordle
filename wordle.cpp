@@ -7,10 +7,16 @@
 #include <numeric>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/mman.h>
 #include <sys/stat.h>
 #include <unordered_map>
 #include <vector>
+
+#ifdef _WIN32
+  #include <Windows.h>
+#else
+  #include <sys/mman.h>
+#endif // _WIN32
+
 using namespace std;
 
 typedef unsigned char byte;
@@ -261,24 +267,31 @@ int main() {
   starting_solutions.resize(solutions.size());
   iota(starting_solutions.begin(), starting_solutions.end(), 0);
 
+  
+#ifdef _WIN32
+  if (auto f = OpenFileMappingA(FILE_MAP_READ, true, "masks_array.bin")) {
+    masks = (byte *) MapViewOfFile(f, FILE_MAP_READ, 0, 0,
+      sizeof(byte) * possibles.size() * solutions.size());
+#else
   int f = open("masks_array.bin", O_RDONLY);
   if (f != -1) {
     masks = static_cast<byte*>(mmap(
       NULL,
       sizeof(byte) * possibles.size() * solutions.size(),
       PROT_READ, MAP_PRIVATE, f, 0u));
+#endif // _WIN32
   } else {
     int i = 0;
     masks = new byte[possibles.size() * solutions.size()];
-    for (auto guess : possibles) {
-      for (auto soln : solutions) {
+    for (const auto& guess : possibles) {
+      for (const auto& soln : solutions) {
         masks[i++] = create_mask(guess, soln);
       }
     }
 
-    FILE* f = fopen("masks_array.bin", "wb");
-    fwrite(masks, sizeof(byte), possibles.size() * solutions.size(), f);
-    fclose(f);
+    auto f_out = fopen("masks_array.bin", "wb");
+    fwrite(masks, sizeof(byte), possibles.size() * solutions.size(), f_out);
+    fclose(f_out);
   }
 
   // ifstream guessfile("ranked_first_guesses.txt");
