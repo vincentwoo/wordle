@@ -267,10 +267,13 @@ int main() {
   starting_solutions.resize(solutions.size());
   iota(starting_solutions.begin(), starting_solutions.end(), 0);
 
-  
 #ifdef _WIN32
-  if (auto f = OpenFileMappingA(FILE_MAP_READ, true, "masks_array.bin")) {
-    masks = (byte *) MapViewOfFile(f, FILE_MAP_READ, 0, 0,
+  HANDLE f = CreateFileA("masks_array.bin", GENERIC_READ, 0, NULL,
+    OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+  if (f != INVALID_HANDLE_VALUE) {
+    auto fileMap = CreateFileMappingA(f, NULL, PAGE_READONLY, 0, 0, NULL);
+
+    masks = (byte *) MapViewOfFile(fileMap, FILE_MAP_READ, 0, 0,
       sizeof(byte) * possibles.size() * solutions.size());
 #else
   int f = open("masks_array.bin", O_RDONLY);

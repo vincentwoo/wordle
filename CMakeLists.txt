@@ -8,4 +8,11 @@ project ("wordle")
 # Add source to this project's executable.
 add_executable (wordle "wordle.cpp" )
 
+INCLUDE_DIRECTORIES("C:\\boost_1_78_0")
+
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/word_lists.txt
+     DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/ranked_first_guesses.txt
+     DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
 # TODO: Add tests and install targets if needed.
