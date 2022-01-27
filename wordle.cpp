@@ -27,15 +27,15 @@
 
 using namespace std;
 
-typedef unsigned char byte;
+typedef unsigned char mask_t;
 typedef vector<int> solutions_container;
 
 vector<string> possibles;
 vector<string> solutions;
 solutions_container starting_solutions;
-byte* mask_lookup;
+mask_t* mask_lookup;
 
-byte create_mask(const string &guess, const string &soln) {
+mask_t create_mask(const string &guess, const string &soln) {
   int responses[] = { 0, 0, 0, 0, 0 };
   unordered_map<char, int> letterCounts;
 
@@ -58,14 +58,14 @@ byte create_mask(const string &guess, const string &soln) {
     }
   }
 
-  byte mask = 0;
+  mask_t mask = 0;
   for (int i = 0; i < 5; i++) {
     mask += responses[i] * pow(3, (4 - i));
   }
   return mask;
 }
 
-string mask_to_str(byte mask) {
+string mask_to_str(mask_t mask) {
   string ret(5, '0');
   for (int i = 4; i >= 0; i--) {
     ret[i] = '0' + (mask % 3);
@@ -112,7 +112,7 @@ GuessScore guess_next_word(const solutions_container &remaining_solutions)
   for (int guess_idx = 0; guess_idx < possibles.size(); guess_idx++) {
     short tally[243] = {};
     int bonus = 0;
-    //const byte* lookup_offset = mask_lookup + guess_idx * solutions.size();
+    //const mask_t* lookup_offset = mask_lookup + guess_idx * solutions.size();
     for (auto const &soln : remaining_solutions) {
       tally[mask_lookup[guess_idx * solutions.size() + soln]]++;
       if (soln == guess_idx) bonus = -1;
@@ -182,7 +182,7 @@ GuessScore guess_next_word_2_ply(const solutions_container &remaining_solutions)
   return best;
 }
 
-solutions_container filter_solutions(int guess_idx, byte mask, const solutions_container& current_solutions) {
+solutions_container filter_solutions(int guess_idx, mask_t mask, const solutions_container& current_solutions) {
   solutions_container ret;
   for (const auto& soln : current_solutions) {
     if (mask == mask_lookup[guess_idx * solutions.size() + soln])
@@ -200,7 +200,7 @@ void play_game() {
     cout << "Enter results ('.' for no match, 'X' for yellow, 'O' for green):" << endl;
     string mask_buf;
     cin >> mask_buf;
-    byte mask = 0;
+    mask_t mask = 0;
     for (int i = 0; i < 5; i++) {
       int m = 0;
       if (mask_buf[i] == 'x') {
@@ -248,7 +248,7 @@ vector<int> benchmark(string starting_word = "crate") {
     while (true) {
       if (guess_idx == answer) break;
 
-      const byte& mask = mask_lookup[guess_idx * solutions.size() + answer];
+      const mask_t& mask = mask_lookup[guess_idx * solutions.size() + answer];
       //cout << "Starting size: " << remaining_solutions.size() << endl;
       remaining_solutions = filter_solutions(guess_idx, mask,
         depth == 1 ? starting_solutions : remaining_solutions);
@@ -294,10 +294,11 @@ void jobFunc() {
 
 void runParallelizedBenchmark() {
   int n_guesses = 1000;//possibles.size();
+  int n_threads = 2;
   results.resize(n_guesses);
   for (int i = 0; i < n_guesses; i++) workQueue.push(i);
   vector<thread*> threads;
-  for (int i = 0; i < 12; i++) {
+  for (int i = 0; i < n_threads; i++) {
     threads.push_back(new thread(jobFunc));
   }
   for (auto _thread : threads) _thread->join();
@@ -337,20 +338,20 @@ int main() {
     OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
   if (f != INVALID_HANDLE_VALUE) {
     auto fileMap = CreateFileMappingA(f, NULL, PAGE_READONLY, 0, 0, NULL);
-    mask_lookup = (byte *) MapViewOfFile(fileMap, FILE_MAP_READ, 0, 0,
-      sizeof(byte) * possibles.size() * solutions.size());
+    mask_lookup = (mask_t *) MapViewOfFile(fileMap, FILE_MAP_READ, 0, 0,
+      sizeof(mask_t) * possibles.size() * solutions.size());
 #else
   int f = open("mask_lookup_array.bin", O_RDONLY);
   if (f != -1) {
-    mask_lookup = static_cast<byte*>(mmap(
+    mask_lookup = static_cast<mask_t*>(mmap(
       NULL,
-      sizeof(byte) * possibles.size() * solutions.size(),
+      sizeof(mask_t) * possibles.size() * solutions.size(),
       PROT_READ, MAP_PRIVATE, f, 0u));
 #endif // _WIN32
   } else {
     cout << "Regenerating lookup tables" << endl;
     int i = 0;
-    mask_lookup = new byte[possibles.size() * solutions.size()];
+    mask_lookup = new mask_t[possibles.size() * solutions.size()];
     for (const auto& guess : possibles) {
       for (const auto& soln : solutions) {
         mask_lookup[i++] = create_mask(guess, soln);
@@ -358,7 +359,7 @@ int main() {
     }
 
     auto f_out = fopen("mask_lookup_array.bin", "wb");
-    fwrite(mask_lookup, sizeof(byte), possibles.size() * solutions.size(), f_out);
+    fwrite(mask_lookup, sizeof(mask_t), possibles.size() * solutions.size(), f_out);
     fclose(f_out);
   }
   auto start = chrono::system_clock::now();
@@ -367,7 +368,7 @@ int main() {
   runParallelizedBenchmark();
   //play_game();
 
-  //auto distribution = benchmark("drone");
+  //auto distribution = benchmark("crate");
   //int total = 0;
   //for (int turn = 1; turn <= 6; turn++) {
   //  total += distribution[turn] * turn;
