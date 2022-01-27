@@ -165,7 +165,7 @@ GuessScore guess_next_word_2_ply(const solutions_container &remaining_solutions)
       return a.size() > b.size();
     });
 
-    if (groups[0].size() > remaining_solutions.size() / 4) continue;
+    if (groups[0].size() > remaining_solutions.size() / 2) continue;
 
     for (auto const &group : groups) {
       if (group.empty() || subScore.score >= best.score) break;
@@ -257,7 +257,6 @@ vector<int> benchmark(string starting_word = "crate") {
       //cout << endl;
 
       guess_idx = guess_next_word_2_ply(remaining_solutions).guess;
-
       depth++;
     }
     distribution[depth]++;
@@ -368,7 +367,7 @@ int main() {
   runParallelizedBenchmark();
   //play_game();
 
-  //auto distribution = benchmark("crate");
+  //auto distribution = benchmark("drone");
   //int total = 0;
   //for (int turn = 1; turn <= 6; turn++) {
   //  total += distribution[turn] * turn;
