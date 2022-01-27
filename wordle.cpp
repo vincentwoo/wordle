@@ -168,7 +168,6 @@ unordered_map<
   container_hash<solutions_container>
 > cache_1_ply;
 shared_mutex cache_1_ply_mutex;
-// int cache_accesses = 0, cache_hits = 0;
 
 GuessScore guess_next_word(
   const solutions_container &remaining_solutions,
@@ -181,7 +180,6 @@ GuessScore guess_next_word(
   cache_1_ply_mutex.lock_shared();
   auto it = cache_1_ply.find(remaining_solutions);
   if (it != cache_1_ply.end()) {
-    // cache_hits++;
     auto ret = it->second;
     cache_1_ply_mutex.unlock_shared();
     return ret;
@@ -192,16 +190,11 @@ GuessScore guess_next_word(
   for (int guess_idx = 0; guess_idx < possibles.size(); guess_idx++) {
     short tally[243] = {};
     int bonus = 0;
+    //const byte* lookup_offset = mask_lookup + guess_idx * solutions.size();
     for (auto const &soln : remaining_solutions) {
       tally[mask_lookup[guess_idx * solutions.size() + soln]]++;
       if (soln == guess_idx) bonus = -1;
     }
-
-     //int max = 0;
-     //for (auto const &count : tally) {
-     //  if (count > max) max = count;
-     //}
-     //max = max * 2 + bonus;
 
     int max = bonus;
     for (auto const &count : tally) {
@@ -220,9 +213,9 @@ GuessScore guess_next_word(
 }
 
 unordered_map<
-  constraints_container,
+  solutions_container,
   GuessScore,
-  constraints_hash
+  container_hash<solutions_container>
 > cache_2_ply;
 shared_mutex cache_2_ply_mutex;
 GuessScore guess_next_word_2_ply(
@@ -231,9 +224,8 @@ GuessScore guess_next_word_2_ply(
 {
   if (remaining_solutions.size() < 20) return guess_next_word(remaining_solutions, path);
   cache_2_ply_mutex.lock_shared();
-  auto it = cache_2_ply.find(path);
+  auto it = cache_2_ply.find(remaining_solutions);
   if (it != cache_2_ply.end()) {
-    // cache_hits++;
     auto ret = it->second;
     cache_2_ply_mutex.unlock_shared();
     return ret;
@@ -249,28 +241,26 @@ GuessScore guess_next_word_2_ply(
     }
 
     GuessScore subScore = { guess_idx, 0 };
-    // sort(groups, groups+243, [](const solutions_container& a, const solutions_container& b) -> bool {
-    //   return a.size() > b.size();
-    // });
+    sort(groups, groups+243, [](const solutions_container& a, const solutions_container& b) -> bool {
+      return a.size() > b.size();
+    });
+
+    if (groups[0].size() > remaining_solutions.size() / 4) continue;
 
     for (auto const &group : groups) {
-    // for (int i = 0; i < 5; i++) {
-      // const auto& group = groups[i];
-      if (group.empty()) continue;
+      if (group.empty() || subScore.score >= best.score) break;
       const auto& constraint = constraint_lookup[guess_idx * solutions.size() + group[0]];
       auto _path(path);
       _path.add(constraint);
-      GuessScore leafScore = guess_next_word(group, _path); // FIXME
-      // if (leafScore.score > subScore.score) subScore.score = leafScore.score;
+      GuessScore leafScore = guess_next_word(group, _path);
       subScore.score += group.size() * leafScore.score;
-      if (subScore.score >= best.score) break;
     }
 
     if (subScore.score < best.score) best = subScore;
   }
 
   cache_2_ply_mutex.lock();
-  cache_2_ply[path] = best;
+  cache_2_ply[remaining_solutions] = best;
   cache_2_ply_mutex.unlock();
   return best;
 }
@@ -495,22 +485,15 @@ int main() {
   cout << "Starting run" << endl;
 
   //runParallelizedBenchmark();
-  play_game();
+  //play_game();
 
-  //auto distribution = benchmark("crate");
-  //int total = 0;
-  //for (int turn = 1; turn <= 6; turn++) {
-  //  total += distribution[turn] * turn;
-  //  cout << "Solved in " << turn << " turn: " << distribution[turn] << endl;
-  //}
-  //cout << "Total average: " << (double) total / solutions.size() << endl;
-  //distribution = benchmark("trace");
-  //total = 0;
-  //for (int turn = 1; turn <= 6; turn++) {
-  //  total += distribution[turn] * turn;
-  //  cout << "Solved in " << turn << " turn: " << distribution[turn] << endl;
-  //}
-  //cout << "Total average: " << (double)total / solutions.size() << endl;
+  auto distribution = benchmark("crate");
+  int total = 0;
+  for (int turn = 1; turn <= 6; turn++) {
+    total += distribution[turn] * turn;
+    cout << "Solved in " << turn << " turn: " << distribution[turn] << endl;
+  }
+  cout << "Total average: " << (double) total / solutions.size() << endl;
 
   //int sum = 0, n = 0;
   //for (int i =0; i < 500; i++) {
