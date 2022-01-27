@@ -21,7 +21,13 @@
       "buildCommandArgs": "",
       "ctestCommandArgs": "",
       "inheritEnvironments": [ "msvc_x64_x64" ],
-      "variables": []
+      "variables": [
+        {
+          "name": "CMAKE_CXX_FLAGS_RELWITHDEBINFO",
+          "value": "/MD /Zi /O2 /Ob1 /DNDEBUG  /Qvec-report:1",
+          "type": "STRING"
+        }
+      ]
     }
   ]
 }
