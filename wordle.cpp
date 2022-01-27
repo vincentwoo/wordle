@@ -28,73 +28,14 @@
 using namespace std;
 
 typedef unsigned char byte;
-typedef vector<short> solutions_container;
-
-typedef struct constraint_t {
-  constraint_t() : arr() {}
-  unsigned short& operator[](int i) { return arr[i]; }
-  unsigned short arr[5];
-} constraint_t;
-
-typedef struct constraints_container {
-  constraints_container() : arr() {}
-  constraints_container(const constraints_container& other) { memcpy(arr, other.arr, sizeof(arr)); }
-  unsigned short arr[25];
-  void add(const constraint_t& constraint) {
-    unsigned short *a_head = arr, *a_tail = a_head + 25;
-    const unsigned short *b_head = constraint.arr, *b_tail = b_head + 5;
-
-    unsigned short temp[25] = {}, *temp_head = temp;
-    
-    int i = 0;
-    while (true) {
-      bool a_done = a_head == a_tail || !*a_head;
-      bool b_done = b_head == b_tail || !*b_head;
-      if (a_done && b_done) break;
-
-      if (a_done) {
-        *temp_head = *b_head;
-        b_head++;
-      }
-      else if (b_done) {
-        *temp_head = *a_head;
-        a_head++;
-      }
-      else {
-        if (*a_head == *b_head) {
-          *temp_head = *a_head;
-          a_head++;
-          b_head++;
-        }
-        else {
-          if (*a_head < *b_head) {
-            *temp_head = *a_head;
-            a_head++;
-          }
-          else {
-            *temp_head = *b_head;
-            b_head++;
-          }
-        }
-      }
-      temp_head++;
-      i++;
-    }
-    memcpy(arr, temp, sizeof(arr));
-  }
-
-  bool operator==(const constraints_container& other) const {
-    return memcmp(arr, other.arr, sizeof(arr)) == 0;
-  }
-} constraints_container;
+typedef vector<int> solutions_container;
 
 vector<string> possibles;
 vector<string> solutions;
 solutions_container starting_solutions;
 byte* mask_lookup;
-constraint_t* constraint_lookup;
 
-pair<byte, constraint_t> create_mask(const string &guess, const string &soln) {
+byte create_mask(const string &guess, const string &soln) {
   int responses[] = { 0, 0, 0, 0, 0 };
   unordered_map<char, int> letterCounts;
 
@@ -116,30 +57,13 @@ pair<byte, constraint_t> create_mask(const string &guess, const string &soln) {
       letterCounts[c]--;
     }
   }
-  constraint_t constraint; 
-  for (int i = 0; i < 5; i++) {
-    if (responses[i] != 0) constraint[i] = ((responses[i] << 6) + i) << 8;
-    constraint[i] += guess[i];
-  }
-  sort(constraint.arr, constraint.arr+5);
-  auto end = unique(constraint.arr, constraint.arr + 5);
-  while (end != constraint.arr + 5) {
-    *end = 0;
-    end++;
-  }
 
   byte mask = 0;
   for (int i = 0; i < 5; i++) {
     mask += responses[i] * pow(3, (4 - i));
   }
-  return { mask, constraint };
+  return mask;
 }
-
-struct constraints_hash {
-  size_t operator() (constraints_container const& c) const {
-    return boost::hash_range(c.arr, c.arr + 20);
-  }
-};
 
 string mask_to_str(byte mask) {
   string ret(5, '0');
@@ -169,9 +93,7 @@ unordered_map<
 > cache_1_ply;
 shared_mutex cache_1_ply_mutex;
 
-GuessScore guess_next_word(
-  const solutions_container &remaining_solutions,
-  const constraints_container &path)
+GuessScore guess_next_word(const solutions_container &remaining_solutions)
 {
   if (remaining_solutions.size() <= 2)
     return { remaining_solutions[0], (int)remaining_solutions.size() - 1 };
@@ -218,11 +140,9 @@ unordered_map<
   container_hash<solutions_container>
 > cache_2_ply;
 shared_mutex cache_2_ply_mutex;
-GuessScore guess_next_word_2_ply(
-  const solutions_container &remaining_solutions,
-  const constraints_container &path)
+GuessScore guess_next_word_2_ply(const solutions_container &remaining_solutions)
 {
-  if (remaining_solutions.size() < 20) return guess_next_word(remaining_solutions, path);
+  if (remaining_solutions.size() < 20) return guess_next_word(remaining_solutions);
   cache_2_ply_mutex.lock_shared();
   auto it = cache_2_ply.find(remaining_solutions);
   if (it != cache_2_ply.end()) {
@@ -249,10 +169,7 @@ GuessScore guess_next_word_2_ply(
 
     for (auto const &group : groups) {
       if (group.empty() || subScore.score >= best.score) break;
-      const auto& constraint = constraint_lookup[guess_idx * solutions.size() + group[0]];
-      auto _path(path);
-      _path.add(constraint);
-      GuessScore leafScore = guess_next_word(group, _path);
+      GuessScore leafScore = guess_next_word(group);
       subScore.score += group.size() * leafScore.score;
     }
 
@@ -278,14 +195,12 @@ solutions_container filter_solutions(int guess_idx, byte mask, const solutions_c
 void play_game() {
   string guess = "crate";
   solutions_container remaining_solutions;
-  constraints_container path;
   while (true) {
     cout << "I think you should guess " << guess << endl;
     cout << "Enter results ('.' for no match, 'X' for yellow, 'O' for green):" << endl;
     string mask_buf;
     cin >> mask_buf;
     byte mask = 0;
-    constraint_t constraint;
     for (int i = 0; i < 5; i++) {
       int m = 0;
       if (mask_buf[i] == 'x') {
@@ -293,14 +208,11 @@ void play_game() {
       } else if (mask_buf[i] == 'o') {
         m = 2;
       }
-      if (m != 0) constraint[i] = ((m << 6) + i) << 8;
-      constraint[i] += guess[i];
       mask += m * pow(3, (4 - i));
     }
 
     auto it = find(possibles.begin(), possibles.end(), guess);
     auto guess_idx = distance(possibles.begin(), it);
-    path.add(constraint);
 
     remaining_solutions = filter_solutions(guess_idx, mask,
         remaining_solutions.empty() ? starting_solutions : remaining_solutions);
@@ -318,7 +230,7 @@ void play_game() {
 
     if (remaining_solutions.size() == 1) break;
 
-    guess = possibles[guess_next_word_2_ply(remaining_solutions, path).guess];
+    guess = possibles[guess_next_word_2_ply(remaining_solutions).guess];
   }
 }
 
@@ -327,13 +239,9 @@ vector<int> benchmark(string starting_word = "crate") {
   int starting_guess_idx = distance(possibles.begin(), it);
   vector<int> distribution(7, 0);
 
-  //short second_guess_cache[243];
-  //fill(second_guess_cache, second_guess_cache+243, -1);
-
   for (int answer = 0; answer < solutions.size(); answer++) {
     //cout << "Starting " << starting_word << ", " << solutions[answer] << endl;
     solutions_container remaining_solutions;
-    constraints_container path;
     int guess_idx = starting_guess_idx;
     int depth = 1;
 
@@ -341,8 +249,6 @@ vector<int> benchmark(string starting_word = "crate") {
       if (guess_idx == answer) break;
 
       const byte& mask = mask_lookup[guess_idx * solutions.size() + answer];
-      const constraint_t& constraint = constraint_lookup[guess_idx * solutions.size() + answer];
-      path.add(constraint);
       //cout << "Starting size: " << remaining_solutions.size() << endl;
       remaining_solutions = filter_solutions(guess_idx, mask,
         depth == 1 ? starting_solutions : remaining_solutions);
@@ -350,12 +256,7 @@ vector<int> benchmark(string starting_word = "crate") {
       //for (const auto& i : remaining_solutions) { cout << solutions[i] << " "; }
       //cout << endl;
 
-      //if (depth == 1 && second_guess_cache[mask] != -1) {
-      //  guess_idx = second_guess_cache[mask];
-      //} else {
-        guess_idx = guess_next_word_2_ply(remaining_solutions, path).guess;
-      //  if (depth == 1) second_guess_cache[mask] = guess_idx;
-      //}
+      guess_idx = guess_next_word_2_ply(remaining_solutions).guess;
 
       depth++;
     }
@@ -439,13 +340,6 @@ int main() {
     auto fileMap = CreateFileMappingA(f, NULL, PAGE_READONLY, 0, 0, NULL);
     mask_lookup = (byte *) MapViewOfFile(fileMap, FILE_MAP_READ, 0, 0,
       sizeof(byte) * possibles.size() * solutions.size());
-
-  f = CreateFileA("constraint_lookup_array.bin", GENERIC_READ, 0, NULL,
-    OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-  fileMap = CreateFileMappingA(f, NULL, PAGE_READONLY, 0, 0, NULL);
-  constraint_lookup = (constraint_t *) MapViewOfFile(fileMap, FILE_MAP_READ, 0, 0,
-    sizeof(constraint_t) * possibles.size() * solutions.size());
-
 #else
   int f = open("mask_lookup_array.bin", O_RDONLY);
   if (f != -1) {
@@ -453,58 +347,56 @@ int main() {
       NULL,
       sizeof(byte) * possibles.size() * solutions.size(),
       PROT_READ, MAP_PRIVATE, f, 0u));
-
-    constraint_lookup = static_cast<constraint_t*>(mmap(
-      NULL,
-      sizeof(constraint_t) * possibles.size() * solutions.size(),
-      PROT_READ, MAP_PRIVATE, open("constraint_lookup_array.bin", O_RDONLY), 0u));
 #endif // _WIN32
   } else {
     cout << "Regenerating lookup tables" << endl;
     int i = 0;
     mask_lookup = new byte[possibles.size() * solutions.size()];
-    constraint_lookup = new constraint_t[possibles.size() * solutions.size()];
     for (const auto& guess : possibles) {
       for (const auto& soln : solutions) {
-        const auto& mask_constraint = create_mask(guess, soln);
-        mask_lookup[i] = mask_constraint.first;
-        constraint_lookup[i] = mask_constraint.second;
-        i++;
+        mask_lookup[i++] = create_mask(guess, soln);
       }
     }
 
     auto f_out = fopen("mask_lookup_array.bin", "wb");
     fwrite(mask_lookup, sizeof(byte), possibles.size() * solutions.size(), f_out);
     fclose(f_out);
-
-    f_out = fopen("constraint_lookup_array.bin", "wb");
-    fwrite(constraint_lookup, sizeof(constraint_t), possibles.size() * solutions.size(), f_out);
-    fclose(f_out);
   }
   auto start = chrono::system_clock::now();
   cout << "Starting run" << endl;
 
-  //runParallelizedBenchmark();
+  runParallelizedBenchmark();
   //play_game();
 
-  auto distribution = benchmark("crate");
-  int total = 0;
-  for (int turn = 1; turn <= 6; turn++) {
-    total += distribution[turn] * turn;
-    cout << "Solved in " << turn << " turn: " << distribution[turn] << endl;
-  }
-  cout << "Total average: " << (double) total / solutions.size() << endl;
-
-  //int sum = 0, n = 0;
-  //for (int i =0; i < 500; i++) {
-  //  sum += i * key_sizes[i];
-  //  n += key_sizes[i];
+  //auto distribution = benchmark("crate");
+  //int total = 0;
+  //for (int turn = 1; turn <= 6; turn++) {
+  //  total += distribution[turn] * turn;
+  //  cout << "Solved in " << turn << " turn: " << distribution[turn] << endl;
   //}
-  //cout << "avg key size: " << (double) sum / n << endl;
+  //cout << "Total average: " << (double) total / solutions.size() << endl;
 
   auto end = chrono::system_clock::now();
   std::chrono::duration<double> elapsed_seconds = end - start;
   cout << elapsed_seconds.count() << " elapsed" << endl;
+
+  int total_key_length = 0, n = 0, max = 0;
+  for (const auto& entry : cache_1_ply) {
+    auto size = entry.first.size();
+    total_key_length += size;
+    n++;
+    if (size > max) max = size;
+  }
+  cout << "1-ply cache stats: " << double(total_key_length) / n << " avg, " << n << " total, " << max << " max." << endl;
+
+  total_key_length = 0, n = 0, max = 0;
+  for (const auto& entry : cache_2_ply) {
+    auto size = entry.first.size();
+    total_key_length += size;
+    n++;
+    if (size > max) max = size;
+  }
+  cout << "2-ply cache stats: " << double(total_key_length) / n << " avg, " << n << " total, " << max << " max." << endl;
 
   // cout << guess_counts.size() << " unique words guessed:" << endl;
   // for (auto entry : guess_counts) {
