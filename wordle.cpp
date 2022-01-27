@@ -248,6 +248,11 @@ vector<int> benchmark(string starting_word = "crate") {
     while (true) {
       if (guess_idx == answer) break;
 
+      if (depth > 5) {
+        cout << "Problem with starting word: " << starting_word << endl;
+        exit(0);
+      }
+
       const mask_t& mask = mask_lookup[guess_idx * solutions.size() + answer];
       //cout << "Starting size: " << remaining_solutions.size() << endl;
       remaining_solutions = filter_solutions(guess_idx, mask,
