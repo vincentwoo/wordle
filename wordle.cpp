@@ -6,7 +6,6 @@
 #include <iostream>
 #include <math.h>
 #include <mutex>
-#include <numeric>
 #include <queue>
 #include <shared_mutex>
 #include <thread>

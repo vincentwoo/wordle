@@ -1,7 +1,13 @@
+#ifndef WORDLE_UTIL_H
+#define WORDLE_UTIL_H
+
 #include <fcntl.h>
 #include <fstream>
+#include <iostream>
+#include <numeric>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string>
 #include <sys/stat.h>
 #include <unordered_map>
 #ifdef _WIN32
@@ -46,7 +52,7 @@ mask_t create_mask(const string& guess, const string& soln) {
 
   mask_t mask = 0;
   for (int i = 0; i < 5; i++) {
-    mask += responses[i] * pow(3, (4 - i));
+    mask += responses[i] * (mask_t)pow(3, (4 - i));
   }
   return mask;
 }
@@ -108,3 +114,5 @@ string mask_to_str(mask_t mask) {
   }
   return ret;
 }
+
+#endif
