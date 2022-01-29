@@ -269,29 +269,29 @@ int main() {
   auto start = chrono::system_clock::now();
   cout << "Starting run" << endl;
 
-  runParallelizedBenchmark();
-  //play_game();
+  // runParallelizedBenchmark();
+  // play_game();
 
-  //auto distribution = benchmark("drone");
-  //int total = 0;
-  //for (int turn = 1; turn <= 6; turn++) {
-  //  total += distribution[turn] * turn;
-  //  cout << "Solved in " << turn << " turn: " << distribution[turn] << endl;
-  //}
-  //cout << "Total average: " << (double) total / solutions.size() << endl;
+  auto distribution = benchmark("crate");
+  int total = 0;
+  for (int turn = 1; turn <= 6; turn++) {
+   total += distribution[turn] * turn;
+   cout << "Solved in " << turn << " turn: " << distribution[turn] << endl;
+  }
+  cout << "Total average: " << (double) total / solutions.size() << endl;
 
   auto end = chrono::system_clock::now();
   std::chrono::duration<double> elapsed_seconds = end - start;
   cout << elapsed_seconds.count() << " elapsed" << endl;
 
-  int total_key_length = 0, n = 0, max = 0;
+  size_t total_key_length = 0, n = 0, max = 0;
   for (const auto& entry : cache_1_ply) {
     auto size = entry.first.size();
     total_key_length += size;
     n++;
     if (size > max) max = size;
   }
-  cout << "1-ply cache stats: " << double(total_key_length) / n << " avg, " << n << " total, " << max << " max." << endl;
+  cout << "1-ply cache stats: " << double(total_key_length) / n << " avg size, " << n << " entries, " << max << " max size." << endl;
 
   total_key_length = 0, n = 0, max = 0;
   for (const auto& entry : cache_2_ply) {
@@ -300,7 +300,7 @@ int main() {
     n++;
     if (size > max) max = size;
   }
-  cout << "2-ply cache stats: " << double(total_key_length) / n << " avg, " << n << " total, " << max << " max." << endl;
+  cout << "2-ply cache stats: " << double(total_key_length) / n << " avg size, " << n << " entries, " << max << " max size." << endl;
 
   // cout << guess_counts.size() << " unique words guessed:" << endl;
   // for (auto entry : guess_counts) {
