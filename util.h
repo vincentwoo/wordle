@@ -27,6 +27,13 @@ vector<string> solutions;
 solutions_container starting_solutions;
 mask_t* mask_lookup;
 
+template <typename Container>
+struct container_hash {
+  size_t operator() (Container const& c) const {
+    return boost::hash_range(c.begin(), c.end());
+  }
+};
+
 mask_t create_mask(const string& guess, const string& soln) {
   int responses[] = { 0, 0, 0, 0, 0 };
   unordered_map<char, int> letterCounts;

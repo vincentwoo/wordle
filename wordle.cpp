@@ -15,13 +15,6 @@
 
 using namespace std;
 
-template <typename Container>
-struct container_hash {
-  size_t operator() (Container const& c) const {
-    return boost::hash_range(c.begin(), c.end());
-  }
-};
-
 struct GuessScore {
   int guess;
   int score;
